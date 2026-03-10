@@ -2789,6 +2789,41 @@
     // parse the content
     let result = ()
     let hidden-parts = ()
+    // Tracks what kind of items are currently accumulated in hidden-parts:
+    //   none   → no items yet / last flush was non-list content
+    //   "list"  → list.item elements
+    //   "enum"  → enum.item elements
+    //   "terms" → terms.item elements
+    // Used to wrap the cover() call in a block with the matching spacing so that
+    // the spacing between the preceding visible items and the covered block matches
+    // intra-list spacing instead of defaulting to paragraph spacing.
+    let hidden-parts-context = none
+
+    // Return the covered content wrapped in a block whose spacing matches the
+    // kind of items that were accumulated in hidden-parts.  Using block(spacing:)
+    // rather than block(above:, below:) is intentional: Typst collapses adjacent
+    // block spacings to the maximum, but the `spacing` shorthand also overrides
+    // the default paragraph spacing that would otherwise appear at the boundary.
+    let cover-hidden(covered, ctx) = {
+      if ctx == "list" {
+        context block(
+          spacing: if list.spacing == auto { par.leading } else { list.spacing },
+          covered,
+        )
+      } else if ctx == "enum" {
+        context block(
+          spacing: if enum.spacing == auto { par.leading } else { enum.spacing },
+          covered,
+        )
+      } else if ctx == "terms" {
+        context block(
+          spacing: if terms.spacing == auto { par.leading } else { terms.spacing },
+          covered,
+        )
+      } else {
+        covered
+      }
+    }
 
     // Flatten sequences and handle each child element
     let children = if utils.is-sequence(it) {
@@ -2812,14 +2847,16 @@
             // If we jumped back into the visible zone, flush hidden-parts in order
             // (so they appear before subsequent visible content, not after it)
             if hidden-parts.len() != 0 and repetitions <= index {
-              result.push(cover(hidden-parts.sum()))
+              result.push(cover-hidden(cover(hidden-parts.sum()), hidden-parts-context))
               hidden-parts = ()
+              hidden-parts-context = none
             }
           } else {
             // absolute: reveal all hidden content then jump to target subslide
             if hidden-parts.len() != 0 {
-              result.push(cover(hidden-parts.sum()))
+              result.push(cover-hidden(cover(hidden-parts.sum()), hidden-parts-context))
               hidden-parts = ()
+              hidden-parts-context = none
             }
             max-repetitions = calc.max(max-repetitions, repetitions)
             repetitions = child.value.n
@@ -3009,8 +3046,9 @@
       } else if child == linebreak() or child == parbreak() {
         // clear the hidden-parts when encounter linebreak or parbreak
         if hidden-parts.len() != 0 {
-          result.push(cover(hidden-parts.sum()))
+          result.push(cover-hidden(cover(hidden-parts.sum()), hidden-parts-context))
           hidden-parts = ()
+          hidden-parts-context = none
         }
         result.push(child)
       } else if utils.is-sequence(child) {
@@ -3054,8 +3092,9 @@
         // Propagate meanwhile effect from inside the sequence
         if final-repetitions < repetitions {
           if hidden-parts.len() != 0 {
-            result.push(cover(hidden-parts.sum()))
+            result.push(cover-hidden(cover(hidden-parts.sum()), hidden-parts-context))
             hidden-parts = ()
+            hidden-parts-context = none
           }
           max-repetitions = calc.max(max-repetitions, repetitions)
         }
@@ -3091,8 +3130,9 @@
         // Propagate meanwhile effect from inside the styled element
         if final-repetitions < repetitions {
           if hidden-parts.len() != 0 {
-            result.push(cover(hidden-parts.sum()))
+            result.push(cover-hidden(cover(hidden-parts.sum()), hidden-parts-context))
             hidden-parts = ()
+            hidden-parts-context = none
           }
           max-repetitions = calc.max(max-repetitions, repetitions)
         }
@@ -3132,8 +3172,9 @@
         // Propagate meanwhile effect from inside the list item
         if final-repetitions < repetitions {
           if hidden-parts.len() != 0 {
-            result.push(cover(hidden-parts.sum()))
+            result.push(cover-hidden(cover(hidden-parts.sum()), hidden-parts-context))
             hidden-parts = ()
+            hidden-parts-context = none
           }
           max-repetitions = calc.max(max-repetitions, repetitions)
         }
@@ -3142,6 +3183,14 @@
         ) {
           result.push(reconstructed)
         } else {
+          // Track the list context so flush-cover() uses the matching block spacing.
+          hidden-parts-context = if child.func() == list.item {
+            "list"
+          } else if child.func() == enum.item {
+            "enum"
+          } else {
+            hidden-parts-context
+          }
           hidden-parts.push(reconstructed)
         }
         repetitions = final-repetitions
@@ -3190,8 +3239,9 @@
         // Propagate meanwhile effect from inside the table/grid/stack
         if final-repetitions < repetitions {
           if hidden-parts.len() != 0 {
-            result.push(cover(hidden-parts.sum()))
+            result.push(cover-hidden(cover(hidden-parts.sum()), hidden-parts-context))
             hidden-parts = ()
+            hidden-parts-context = none
           }
           max-repetitions = calc.max(max-repetitions, repetitions)
         }
@@ -3238,8 +3288,9 @@
         // Propagate meanwhile effect from inside the reconstructable element
         if final-repetitions < repetitions {
           if hidden-parts.len() != 0 {
-            result.push(cover(hidden-parts.sum()))
+            result.push(cover-hidden(cover(hidden-parts.sum()), hidden-parts-context))
             hidden-parts = ()
+            hidden-parts-context = none
           }
           max-repetitions = calc.max(max-repetitions, repetitions)
         }
@@ -3273,8 +3324,9 @@
         // Propagate meanwhile effect from inside the terms item
         if final-repetitions < repetitions {
           if hidden-parts.len() != 0 {
-            result.push(cover(hidden-parts.sum()))
+            result.push(cover-hidden(cover(hidden-parts.sum()), hidden-parts-context))
             hidden-parts = ()
+            hidden-parts-context = none
           }
           max-repetitions = calc.max(max-repetitions, repetitions)
         }
@@ -3283,6 +3335,8 @@
         ) {
           result.push(reconstructed)
         } else {
+          // Track the terms context so flush-cover() uses the matching block spacing.
+          hidden-parts-context = "terms"
           hidden-parts.push(reconstructed)
         }
         repetitions = final-repetitions
@@ -3337,8 +3391,9 @@
         // Propagate meanwhile effect from inside the columns
         if final-repetitions < repetitions {
           if hidden-parts.len() != 0 {
-            result.push(cover(hidden-parts.sum()))
+            result.push(cover-hidden(cover(hidden-parts.sum()), hidden-parts-context))
             hidden-parts = ()
+            hidden-parts-context = none
           }
           max-repetitions = calc.max(max-repetitions, repetitions)
         }
@@ -3403,8 +3458,9 @@
         // Propagate meanwhile effect from inside the place
         if final-repetitions < repetitions {
           if hidden-parts.len() != 0 {
-            result.push(cover(hidden-parts.sum()))
+            result.push(cover-hidden(cover(hidden-parts.sum()), hidden-parts-context))
             hidden-parts = ()
+            hidden-parts-context = none
           }
           max-repetitions = calc.max(max-repetitions, repetitions)
         }
@@ -3469,8 +3525,9 @@
         // Propagate meanwhile effect from inside the rotate
         if final-repetitions < repetitions {
           if hidden-parts.len() != 0 {
-            result.push(cover(hidden-parts.sum()))
+            result.push(cover-hidden(cover(hidden-parts.sum()), hidden-parts-context))
             hidden-parts = ()
+            hidden-parts-context = none
           }
           max-repetitions = calc.max(max-repetitions, repetitions)
         }
@@ -3496,8 +3553,9 @@
     }
     // clear the hidden-parts when end
     if hidden-parts.len() != 0 {
-      result.push(cover(hidden-parts.sum()))
+      result.push(cover-hidden(cover(hidden-parts.sum()), hidden-parts-context))
       hidden-parts = ()
+      hidden-parts-context = none
     }
     parsed-results.push(result.sum(default: []))
   }
