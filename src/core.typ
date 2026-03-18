@@ -3252,7 +3252,7 @@
     let hidden-parts = ()
 
     // Reference element for detecting space nodes in the content tree.
-    let _space-func = [ ].func()
+    let typst-builtin-space = [ ].func()
 
     // Helper: is this content element a list/enum/terms item?
     let _is-list-item(it) = (
@@ -3273,7 +3273,7 @@
     let cover-hidden(cover-fn, items, last-result) = {
       // First non-space hidden element
       let first-pos = items.position(item => {
-        not (type(item) == content and item.func() == _space-func)
+        not (type(item) == content and item.func() == typst-builtin-space)
       })
       let first-is-list = (
         first-pos != none and _is-list-item(items.at(first-pos))
@@ -3288,7 +3288,7 @@
         let found = false
         for i in range(last-result.len()) {
           let item = last-result.at(last-result.len() - 1 - i)
-          if type(item) == content and item.func() == _space-func {
+          if type(item) == content and item.func() == typst-builtin-space {
             // skip space nodes only
           } else {
             found = _is-list-item(item)
